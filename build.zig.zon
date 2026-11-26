@@ -57,7 +57,7 @@
         "build.zig.zon",
         "src",
         // 例如……
-        //"LICENSE",
+        "LICENSE",
         //"README.md",
     },
 }

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: ISC
+// Copyright (c) 2026 mtueih
+
 const std = @import("std");
 const builtin = @import("builtin");
 const build_options = @import("build_options");

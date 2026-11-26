@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: ISC
+// Copyright (c) 2026 mtueih
+
 //! run_hidden 所需的最小 Win32 API 声明集合。
 //!
 //! 排列规则：声明分为常量、类型、函数三个板块，每个板块内部严格按照
