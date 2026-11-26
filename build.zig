@@ -17,8 +17,10 @@ pub fn build(b: *std.Build) void {
     // exe 内的调试记录和 .pdb（Zig 0.17 不再内置该选项，需在此声明）。
     const strip = b.option(bool, "strip", "Remove debug info and do not emit .pdb");
 
-    addTool(b, target, optimize, strip, "run_hidden", false);
-    addTool(b, target, optimize, strip, "run_hidden_wait", true);
+    const run_hidden = addTool(b, target, optimize, strip, "run_hidden", false);
+    const run_hidden_wait = addTool(b, target, optimize, strip, "run_hidden_wait", true);
+
+    addTests(b, target, optimize, run_hidden, run_hidden_wait);
 }
 
 fn addTool(
@@ -28,7 +30,7 @@ fn addTool(
     strip: ?bool,
     name: []const u8,
     wait: bool,
-) void {
+) *std.Build.Step.Compile {
     const options = b.addOptions();
     options.addOption(bool, "wait", wait);
 
@@ -52,4 +54,52 @@ fn addTool(
     exe.subsystem = .windows;
 
     b.installArtifact(exe);
+    return exe;
+}
+
+/// 注册 `zig build test`：构建集成测试所需的辅助程序与测试驱动，并运行它们。
+///
+/// 测试驱动会自己用原始命令行启动 `run_hidden` / `run_hidden_wait`，
+/// 因此这里只需把三个产物的路径作为参数传进去。
+fn addTests(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    run_hidden: *std.Build.Step.Compile,
+    run_hidden_wait: *std.Build.Step.Compile,
+) void {
+    const test_step = b.step("test", "Run CLI integration tests");
+
+    // 参数记录器：把收到的参数写入文件，供测试驱动校验。
+    const argv_echo = b.addExecutable(.{
+        .name = "argv_echo",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("test/argv_echo.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+
+    const test_module = b.createModule(.{
+        .root_source_file = b.path("test/cli_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    test_module.addImport("win32", b.createModule(.{
+        .root_source_file = b.path("src/win32.zig"),
+        .target = target,
+        .optimize = optimize,
+    }));
+
+    const cli_test = b.addExecutable(.{
+        .name = "cli_test",
+        .root_module = test_module,
+    });
+
+    const run_cli_test = b.addRunArtifact(cli_test);
+    run_cli_test.addArtifactArg2(run_hidden, .{});
+    run_cli_test.addArtifactArg2(run_hidden_wait, .{});
+    run_cli_test.addArtifactArg2(argv_echo, .{});
+
+    test_step.dependOn(&run_cli_test.step);
 }

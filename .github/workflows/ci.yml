@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths: &ci_paths
+      - "src/**"
+      - "test/**"
+      - "build.zig"
+      - "build.zig.zon"
+      - ".github/workflows/ci.yml"
+  pull_request:
+    branches: [main]
+    paths: *ci_paths
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: build-and-test (${{ matrix.optimize }})
+    runs-on: windows-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        optimize: [Debug, ReleaseFast, ReleaseSmall]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.17.1
+
+      - name: Show Zig version
+        run: zig version
+
+      - name: Build
+        run: zig build -Doptimize=${{ matrix.optimize }}
+
+      - name: Test
+        run: zig build test -Doptimize=${{ matrix.optimize }}
+
+      # 单独验证发布配置（去掉调试信息与 .pdb），避免发版时才发现问题。
+      - name: Build (stripped release)
+        if: matrix.optimize == 'ReleaseFast'
+        run: zig build -Doptimize=ReleaseFast -Dstrip=true
+
+      - name: Report binary size
+        if: matrix.optimize == 'ReleaseFast'
+        shell: pwsh
+        run: |
+          Get-ChildItem zig-out/bin/*.exe | ForEach-Object {
+            "{0}: {1} bytes" -f $_.Name, $_.Length
+          }

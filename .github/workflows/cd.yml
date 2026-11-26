@@ -1,0 +1,102 @@
+name: CD
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and release
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # 生成发布说明需要完整历史与较早的标签。
+          fetch-depth: 0
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.17.1
+
+      - name: Validate tag
+        shell: pwsh
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          if ($tag -notmatch '^v\d+\.\d+\.\d+(-[\w.]+)?$') {
+            throw "标签格式无效：$tag（期望 v<major>.<minor>.<patch>）"
+          }
+
+      - name: Build
+        run: zig build -Doptimize=ReleaseFast -Dstrip=true
+
+      - name: Test
+        run: zig build test -Doptimize=ReleaseFast
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          $stage = "run_hidden-$tag-win64"
+
+          New-Item -ItemType Directory -Path "$stage/bin" -Force | Out-Null
+          Copy-Item zig-out/bin/run_hidden.exe "$stage/bin/"
+          Copy-Item zig-out/bin/run_hidden_wait.exe "$stage/bin/"
+          Copy-Item LICENSE, README.md $stage/
+
+          $zip = "$stage.zip"
+          Compress-Archive -Path $stage -DestinationPath $zip
+
+          $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $zip" | Out-File -FilePath "$zip.sha256" -Encoding utf8NoBOM
+
+          "ZIP=$zip" >> $env:GITHUB_ENV
+
+      - name: Generate release notes
+        shell: pwsh
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+
+          # 没有更早标签时 git describe 会失败；这里不希望原生命令失败直接终止步骤。
+          $PSNativeCommandUseErrorActionPreference = $false
+
+          $previous = ""
+          $describe = git describe --tags --abbrev=0 "$tag^" 2>$null
+          if ($LASTEXITCODE -eq 0 -and $describe) {
+            $previous = "$describe".Trim()
+          }
+
+          ./scripts/release-notes.ps1 `
+            -Tag $tag `
+            -PreviousTag $previous `
+            -Repository $env:GITHUB_REPOSITORY `
+            -Assets $env:ZIP `
+            -ZigVersion (zig version) `
+            -Optimize ReleaseFast `
+            -Output RELEASE_NOTES.md
+
+          Get-Content RELEASE_NOTES.md
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: run_hidden-${{ github.ref_name }}-win64
+          path: |
+            run_hidden-${{ github.ref_name }}-win64.zip
+            run_hidden-${{ github.ref_name }}-win64.zip.sha256
+
+      - name: Create release
+        uses: softprops/action-gh-release@v3
+        with:
+          name: run_hidden ${{ github.ref_name }}
+          body_path: RELEASE_NOTES.md
+          files: |
+            run_hidden-${{ github.ref_name }}-win64.zip
+            run_hidden-${{ github.ref_name }}-win64.zip.sha256
+          fail_on_unmatched_files: true
+          prerelease: ${{ contains(github.ref_name, '-') }}

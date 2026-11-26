@@ -3,6 +3,8 @@
 ![Platform](https://img.shields.io/badge/Platform-Windows-blue.svg)
 ![Zig](https://img.shields.io/badge/Zig-0.17.0%2B-orange.svg)
 ![Size](https://img.shields.io/badge/Size-3_KiB-success.svg)
+[![CI](https://github.com/mtueih/run_hidden-zig/actions/workflows/ci.yml/badge.svg)](https://github.com/mtueih/run_hidden-zig/actions/workflows/ci.yml)
+[![CD](https://github.com/mtueih/run_hidden-zig/actions/workflows/cd.yml/badge.svg)](https://github.com/mtueih/run_hidden-zig/actions/workflows/cd.yml)
 [![GitHub License](https://img.shields.io/github/license/mtueih/run_hidden-zig)](LICENSE)
 
 Windows 下以隐藏窗口启动进程的轻量级命令行工具，是 [mtueih/run_hidden](https://github.com/mtueih/run_hidden) 的 Zig 重写版本。
@@ -111,6 +113,44 @@ run_hidden_wait "C:\Tools\worker.exe" --mode "quick run"
 
 `main.zig` 将 panic 处理程序替换为 `std.debug.no_panic`，避免把栈回溯、stderr 加锁和格式化代码拖进二进制。
 
+## 测试
+
+```bash
+zig build test
+```
+
+`zig build test` 会构建一个参数记录器 `argv_echo` 和一个测试驱动 `cli_test`，然后由测试驱动完成集成测试。
+
+之所以需要这么一套东西，是因为两个工具都以隐藏窗口方式运行，子进程没有可用的控制台，无法通过标准输出/标准错误断言结果。测试的流程是：
+
+1. 把 `run_hidden.exe`、`run_hidden_wait.exe` 和 `argv_echo.exe` 复制到一个**同时包含空格和中文**的临时目录，顺带覆盖带引号的程序路径与 Unicode 路径；
+2. 对每个用例，先用完全相同的原始命令行直接启动 `argv_echo` 作为参照，再通过 `run_hidden_wait` 转发同一条命令行；
+3. `argv_echo` 把收到的 `argv` 序列化到文件，测试驱动比较「参照结果」与「转发结果」，并要求两者都等于用例中硬编码的期望值。
+
+用例集中覆盖 Windows `CreateProcessW` 命令行解析的经典陷阱，例如：
+
+- 带空格、制表符、空字符串的参数；
+- 反斜杠与双引号的各种组合：`\"`、`\\"`、`\\\"`、结尾反斜杠 + 引号、未闭合的引号等；
+- 参数中间的引号、相邻引号段、只有引号的参数；
+- Windows 路径、正斜杠路径、Unicode（中文、emoji）参数；
+- 参数前后多余的空格，以及未被引号包裹的工具路径。
+
+除参数转发外，测试还验证：`run_hidden_wait` 透传子进程退出码、`run_hidden` 成功启动后返回 `0`，以及两者在缺少参数时返回 `1`。当被测行为被破坏时，测试会打印具体用例、期望参数与实际参数。
+
+## 持续集成与发布
+
+- **CI**（`.github/workflows/ci.yml`）：在 `Debug`、`ReleaseFast`、`ReleaseSmall` 三种优化模式下分别构建并运行测试；额外验证 `-Dstrip=true` 的发布配置，并报告最终二进制大小。
+- **CD**（`.github/workflows/cd.yml`）：推送 `v*` 标签时触发。先构建并运行测试，再把二进制、`LICENSE`、`README.md` 打包为 `run_hidden-<tag>-win64.zip`，生成 SHA-256 校验文件，最后创建 GitHub Release。
+
+发布说明由 `scripts/release-notes.ps1` 自动生成，而不是只留一行 “Full Changelog”。它会：
+
+- 按 Conventional Commits 的类型（新功能、修复、性能、重构、构建、CI、测试、文档、杂项）分组列出提交，并标注破坏性变更；
+- 附上构建信息（Zig 版本、优化模式、目标平台）；
+- 列出产物名称、大小与 SHA-256；
+- 给出与上一个标签的完整 compare 链接。
+
+发布后仍然可以在 GitHub 的 Release 页面手动补充或修改说明。
+
 ## 从源码构建
 
 ### 环境要求
@@ -149,15 +189,29 @@ zig build -Doptimize=ReleaseFast -Dstrip=true
 | `-Dstrip=true` | 移除调试信息且不生成 `.pdb` |
 | `-Dtarget=...` | 仅接受 Windows 目标（如 `x86_64-windows`、`aarch64-windows`），其他目标会在构建开始时直接报错 |
 
+测试单独运行：
+
+```bash
+zig build test
+```
+
 ## 项目结构
 
 ```text
 .
-├── build.zig          # 构建脚本：两个产物、GUI 子系统、wait 编译期开关
-├── build.zig.zon      # 包元数据（最低 Zig 版本等）
+├── .github/workflows/
+│   ├── ci.yml              # CI：多优化模式构建 + 集成测试
+│   └── cd.yml              # CD：按标签打包并发布 Release
+├── build.zig               # 构建脚本：两个产物、GUI 子系统、wait 编译期开关、test 步骤
+├── build.zig.zon           # 包元数据（最低 Zig 版本等）
+├── scripts/
+│   └── release-notes.ps1   # 根据 git 历史生成发布说明
 ├── src/
-│   ├── main.zig       # 入口、命令行截取、CreateProcessW 调用
-│   └── win32.zig      # 项目所需的最小 Win32 声明集合
+│   ├── main.zig            # 入口、命令行截取、CreateProcessW 调用
+│   └── win32.zig           # 项目所需的最小 Win32 声明集合
+├── test/
+│   ├── argv_echo.zig       # 测试辅助程序：把 argv 写入文件
+│   └── cli_test.zig        # 集成测试驱动：命令行转发与退出码
 ├── LICENSE
 └── README.md
 ```
