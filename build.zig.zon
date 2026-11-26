@@ -58,6 +58,6 @@
         "src",
         // 例如……
         "LICENSE",
-        //"README.md",
+        "README.md",
     },
 }
