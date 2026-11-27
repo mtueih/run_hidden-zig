@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: ISC
+// SPDX-License-Identifier: MIT
 // Copyright (c) 2026 mtueih
 
 //! run_hidden 所需的最小 Win32 API 声明集合。

@@ -1,5 +1,5 @@
 #!/usr/bin/env pwsh
-# SPDX-License-Identifier: ISC
+# SPDX-License-Identifier: MIT
 # Copyright (c) 2026 mtueih
 #
 # 根据 git 提交历史（Conventional Commits）与构建产物生成发布说明。
@@ -185,7 +185,7 @@ else {
 $lines.Add("")
 $lines.Add("---")
 $lines.Add("")
-$lines.Add("本项目采用 [ISC 许可证](https://github.com/$Repository/blob/$Tag/LICENSE) 授权。")
+$lines.Add("本项目采用 [MIT 许可证](https://github.com/$Repository/blob/$Tag/LICENSE) 授权。")
 
 $text = ($lines -join "`n") + "`n"
 $outputPath = if ([System.IO.Path]::IsPathRooted($Output)) {

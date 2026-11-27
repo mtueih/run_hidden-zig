@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: ISC
+// SPDX-License-Identifier: MIT
 // Copyright (c) 2026 mtueih
 
 //! CLI 集成测试：验证 `run_hidden` / `run_hidden_wait` 是否原样转发了命令行。

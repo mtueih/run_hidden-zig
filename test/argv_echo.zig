@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: ISC
+// SPDX-License-Identifier: MIT
 // Copyright (c) 2026 mtueih
 
 //! 集成测试用的参数记录器。

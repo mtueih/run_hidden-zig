@@ -220,4 +220,4 @@ zig build test
 
 ## 许可协议
 
-本项目采用 [ISC 许可证](https://www.isc.org/licenses/) 授权——详情请参阅 [LICENSE](LICENSE) 文件。
+本项目采用 [MIT 许可证](https://opensource.org/license/mit) 授权——详情请参阅 [LICENSE](LICENSE) 文件。
